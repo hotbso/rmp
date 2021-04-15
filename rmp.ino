@@ -1,32 +1,34 @@
 /*
-  MIT License
+    MIT License
 
-  Copyright (c) 2021 Holger Teutsch
+    Copyright (c) 2021 Holger Teutsch
 
-  Permission is hereby granted, free of charge, to any person obtaining a copy
-  of this software and associated documentation files (the "Software"), to deal
-  in the Software without restriction, including without limitation the rights
-  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-  copies of the Software, and to permit persons to whom the Software is
-  furnished to do so, subject to the following conditions:
+    Permission is hereby granted, free of charge, to any person obtaining a copy
+    of this software and associated documentation files (the "Software"), to deal
+    in the Software without restriction, including without limitation the rights
+    to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+    copies of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
 
-  The above copyright notice and this permission notice shall be included in all
-  copies or substantial portions of the Software.
+    The above copyright notice and this permission notice shall be included in all
+    copies or substantial portions of the Software.
 
-  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-  SOFTWARE.
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+    IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+    FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+    AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+    LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+    SOFTWARE.
 
-  RMP that connects to p3d via FSUIPC
+    RMP that connects to p3d via FSUIPC
 
 */
 
 #include <Arduino.h>
 #include <LiquidCrystal.h>
+
+#define VERSION "1.0-dev"
 
 static byte arrow_l[] = {
     B00000,
@@ -58,17 +60,18 @@ int stdby_kHz = 800;
 int mode = 1;
 
 long button_ts;
+long heartbeat_ts = -20000000;
+
 char inbuff[50];
 int inbuff_nxt = 0;
 
 void
-debug_lcd(const char *s) {
-    lcd.setCursor(0, 0);
-    lcd.print(s);
-}
-void
 update_display() {
     char buff[17];
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Active   Standby");
+
     lcd.setCursor(0, 1);
     snprintf(buff, sizeof(buff), "%3d.%03d\001\002%3d.%03d", active_mHz, active_kHz, stdby_mHz, stdby_kHz);
     lcd.print(buff);
@@ -136,7 +139,9 @@ process_message(const char *msg) {
     active_mHz = a / 1000; active_kHz = a % 1000;
     stdby_mHz = s / 1000; stdby_kHz = s % 1000;
     update_display();
+    heartbeat_ts = millis();
 }
+
 int
 get_message() {
     int na = Serial.available();
@@ -197,21 +202,31 @@ int read_LCD_buttons()
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("D Startup RMP");
+    Serial.println("D Startup RMP " VERSION);
 
-    lcd.begin(16, 2);              // start the library
+    lcd.begin(16, 2);
     lcd.createChar(1, arrow_l);
     lcd.createChar(2, arrow_r);
+
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("Active   Standby");
-
-    update_display();
+    lcd.print("rmp " VERSION);
+    delay(2000);
 }
 
 
 void loop() {
     long now = millis();
+
+    get_message();
+
+    if (now - heartbeat_ts > 20 * 1000) {
+        delay(500);
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Waiting for sim");
+        return;
+    }
 
     if (now - button_ts > 200) {
         int lcd_key = read_LCD_buttons();  // read the buttons
@@ -242,6 +257,4 @@ void loop() {
                 break;
         }
     }
-
-    get_message();
 }
