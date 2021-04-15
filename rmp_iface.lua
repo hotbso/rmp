@@ -1,6 +1,6 @@
 -- MIT License
 
--- Copyright (c) 2020 Holger Teutsch
+-- Copyright (c) 2021 Holger Teutsch
 
 -- Permission is hereby granted, free of charge, to any person obtaining a copy
 -- of this software and associated documentation files (the "Software"), to deal
@@ -30,7 +30,10 @@ local port = "COM4"
 
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ end of customizations ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-local rmp = com.open(port, 115200, 0)
+local rmp  = com.open(port, 115200, 0)
+
+local ofs_active = 0x05C4
+local ofs_stdby = 0x05CC
 
 function rmp_data(h, data, len)
     if data:sub(len, len) == "\n" then
@@ -42,33 +45,41 @@ function rmp_data(h, data, len)
         local s = tonumber(data:sub(8, 13))
   
         ipc.log("a = " .. a .. "  s = " .. s)
-        ipc.writeSD(0x05C4, a * 1000)
-        ipc.writeSD(0x05CC, s * 1000)
+        ipc.writeSD(ofs_active, a * 1000)
+        ipc.writeSD(ofs_stdby, s * 1000)
         return
     end
     
     if data:sub(1, 1) == "S" then
         local s = tonumber(data:sub(2, 7))
         ipc.log("s = " .. s)
-        ipc.writeSD(0x05CC, s * 1000)
+        ipc.writeSD(ofs_stdby, s * 1000)
         return
     end
 end
 
 function rmp_heartbeat()
-    local active = ipc.readSD(0x05C4) / 1000
-    local stdby = ipc.readSD(0x05CC) / 1000
+    local active = ipc.readSD(ofs_active) / 1000
+    local stdby = ipc.readSD(ofs_stdby) / 1000
     ipc.log("a: " .. active .. " s: " .. stdby)
-    msg = string.format("H%03d%03d%03d%03da\n", active / 1000, active % 1000, stdby / 1000, stdby % 1000)
+    msg = string.format("H%06d%06da\n", active, stdby)
     ipc.log(msg)
-    com.write(rmp, msg)
+    if rmp ~= 0 then
+        com.write(rmp, msg)
+    end
 end
 
 function rmp_com1_change(ofs, val)
-    ipc.log("com1 " .. val)
+    if ofs == ofs_active then ofs = "active" else ofs = "stdby" end
+    ipc.log("com1 change-> " .. ofs .. "=" .. val)
     rmp_heartbeat()
 end
 
-event.com(rmp, 50, "rmp_data")
-event.timer(5 * 1000, "rmp_heartbeat")
-event.offset(0x05CC, "SD", "rmp_com1_change")
+event.offset(ofs_stdby, "SD", "rmp_com1_change")
+event.offset(ofs_active, "SD", "rmp_com1_change")
+
+if rmp ~= 0 then
+    event.com(rmp, 50, "rmp_data")
+    event.timer(5 * 1000, "rmp_heartbeat")
+end
+
