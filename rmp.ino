@@ -78,10 +78,10 @@ void
 send_message(char type) {
     char buff[30];
     if ('S' == type) {
-        snprintf(buff, sizeof buff, "S%03d%03d_", stdby_mHz, stdby_kHz);
+        snprintf(buff, sizeof buff, "S%06ld_", stdby_mHz * 1000L + stdby_kHz);
         Serial.println(buff);
     } else if ('X' == type) {
-        snprintf(buff, sizeof buff, "X%03d%03d%03d%03d_", active_mHz, active_kHz, stdby_mHz, stdby_kHz);
+        snprintf(buff, sizeof buff, "X%06ld%06ld_", active_mHz * 1000L + active_kHz, stdby_mHz * 1000L + stdby_kHz);
         Serial.println(buff);
     }
 }
@@ -125,15 +125,16 @@ xfer() {
 
 void
 process_message(const char *msg) {
-    Serial.print("D >>>>"); Serial.print(msg); Serial.println("<<<<");
-    int a, b, c, d, cksum;
-    int res = sscanf(msg + 1, "%03d%03d%03d%03d%1x", &a, &b, &c, &d, &cksum);
-    Serial.print("D res="); Serial.println(res);
-    char buff[80];
-    sprintf(buff, "D %03d.%03d %03d.%03d %x", a, b, c, d, cksum);
-    Serial.println(buff);
-    active_mHz = a; active_kHz = b;
-    stdby_mHz = c; stdby_kHz = d;
+    long a, s;
+    int cksum;
+    int res = sscanf(msg + 1, "%06ld%06ld%1x", &a, &s, &cksum);
+    if (res != 3) {
+        Serial.print("D error parsing >>>>"); Serial.print(msg); Serial.println("<<<<");
+        return;
+    }
+
+    active_mHz = a / 1000; active_kHz = a % 1000;
+    stdby_mHz = s / 1000; stdby_kHz = s % 1000;
     update_display();
 }
 int
@@ -157,7 +158,7 @@ get_message() {
 
             inbuff[i++] = '\0';
 
-            Serial.println(inbuff);
+            //Serial.println(inbuff);
 
             process_message(inbuff);
             int remain = inbuff_nxt - i;
@@ -196,7 +197,7 @@ int read_LCD_buttons()
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("Startup RMP");
+    Serial.println("D Startup RMP");
 
     lcd.begin(16, 2);              // start the library
     lcd.createChar(1, arrow_l);

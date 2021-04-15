@@ -79,7 +79,7 @@ event.offset(ofs_stdby, "SD", "rmp_com1_change")
 event.offset(ofs_active, "SD", "rmp_com1_change")
 
 if rmp ~= 0 then
-    event.com(rmp, 50, "rmp_data")
+    event.com(rmp, 150, 1, 10, "rmp_data")
     event.timer(5 * 1000, "rmp_heartbeat")
 end
 
