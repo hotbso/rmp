@@ -42,6 +42,7 @@ static byte arrow_l[] = {
     B00100,
     B00010,
     B00000,
+    B00000,
 };
 
 static byte arrow_r[] = {
@@ -51,6 +52,7 @@ static byte arrow_r[] = {
     B11110,
     B00100,
     B01000,
+    B00000,
     B00000,
 };
 
@@ -66,6 +68,8 @@ char inbuff[50];
 int inbuff_nxt = 0;
 
 int mHz_pos, kHz_pos;
+float kHz_step_time;
+static const float EXP_SMOOTH = 0.3;
 
 void
 update_display() {
@@ -101,22 +105,22 @@ dial_step(int mode, int dir, int steps = 1) {
             stdby_mHz = 118;
     } else {
         do  {
-                int kHz8 = stdby_kHz % 25;
-                if (0 == kHz8) {
-                    stdby_kHz += (dir > 0) ? 5 : -10;
-                } else if (15 == kHz8) {
-                    stdby_kHz += (dir > 0) ? 10 : -5;
-                } else {
-                    stdby_kHz += dir * 5;
-                }
+            int kHz8 = stdby_kHz % 25;
+            if (0 == kHz8) {
+                stdby_kHz += (dir > 0) ? 5 : -10;
+            } else if (15 == kHz8) {
+                stdby_kHz += (dir > 0) ? 10 : -5;
+            } else {
+                stdby_kHz += dir * 5;
+            }
 
-                if (stdby_kHz < 0)
-                    stdby_kHz = 990;
-                else if (stdby_kHz > 990)
-                    stdby_kHz = 0;
+            if (stdby_kHz < 0)
+                stdby_kHz = 990;
+            else if (stdby_kHz > 990)
+                stdby_kHz = 0;
 
-                    steps--;
-            } while (steps > 0);
+            steps--;
+        } while (steps > 0);
     }
 
     send_message('S');
@@ -213,16 +217,14 @@ void loop() {
 
     kHz_encoder.tick();
     int pos = kHz_encoder.getPosition();
-    if (pos > kHz_pos) {
+    if (pos != kHz_pos) {
         int step_time = kHz_encoder.getMillisBetweenRotations();
+        kHz_step_time =  EXP_SMOOTH * step_time + (1.0 - EXP_SMOOTH) * kHz_step_time;
         int rpm = kHz_encoder.getRPM();
-        Serial.print(step_time); Serial.print(" "); Serial.println(rpm);
+        Serial.print(step_time); Serial.print(" "); Serial.print(kHz_step_time); Serial.print(" "); Serial.println(rpm);
         //int steps = rpm > 50 ? 10 : 1;
-        int steps = step_time < 150 ? 10 : 1;
-        dial_step(1, 1, steps);
-        kHz_pos = pos;
-    } else if (pos < kHz_pos) {
-        dial_step(1, -1);
+        int steps = kHz_step_time < 150.0 ? 10 : 1;
+        dial_step(1, pos > kHz_pos ? 1 : -1, steps);
         kHz_pos = pos;
     }
 }
