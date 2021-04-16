@@ -29,8 +29,10 @@
 
 #include <Arduino.h>
 #include <LiquidCrystal_I2C.h>
+#include <RotaryEncoder.h>
 
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
+RotaryEncoder kHz_encoder(13, 12, RotaryEncoder::LatchMode::FOUR3);
 
 static byte arrow_l[] = {
     B00000,
@@ -58,11 +60,12 @@ int stdby_mHz = 122;
 int stdby_kHz = 800;
 int mode = 1;
 
-long button_ts;
 long heartbeat_ts = -20000000;
 
 char inbuff[50];
 int inbuff_nxt = 0;
+
+int mHz_pos, kHz_pos;
 
 void
 update_display() {
@@ -89,7 +92,7 @@ send_message(char type) {
 }
 
 void
-dial_step(int dir) {
+dial_step(int mode, int dir, int steps = 1) {
     if (0 == mode) {
         stdby_mHz += dir;
         if (stdby_mHz < 118)
@@ -97,19 +100,23 @@ dial_step(int dir) {
         else if (stdby_mHz > 135)
             stdby_mHz = 118;
     } else {
-        int kHz8 = stdby_kHz % 25;
-        if (0 == kHz8) {
-            stdby_kHz += (dir > 0) ? 5 : -10;
-        } else if (15 == kHz8) {
-            stdby_kHz += (dir > 0) ? 10 : -5;
-        } else {
-            stdby_kHz += dir * 5;
-        }
+        do  {
+                int kHz8 = stdby_kHz % 25;
+                if (0 == kHz8) {
+                    stdby_kHz += (dir > 0) ? 5 : -10;
+                } else if (15 == kHz8) {
+                    stdby_kHz += (dir > 0) ? 10 : -5;
+                } else {
+                    stdby_kHz += dir * 5;
+                }
 
-        if (stdby_kHz < 0)
-            stdby_kHz = 990;
-        else if (stdby_kHz > 990)
-            stdby_kHz = 0;
+                if (stdby_kHz < 0)
+                    stdby_kHz = 990;
+                else if (stdby_kHz > 990)
+                    stdby_kHz = 0;
+
+                    steps--;
+            } while (steps > 0);
     }
 
     send_message('S');
@@ -174,31 +181,6 @@ get_message() {
     return 0;
 }
 
-// define some values used by the panel and buttons
-#define btnRIGHT  0
-#define btnUP     1
-#define btnDOWN   2
-#define btnLEFT   3
-#define btnSELECT 4
-#define btnNONE   5
-
-// read the buttons
-int read_LCD_buttons()
-{
-    int adc_key_in = analogRead(0);      // read the value from the sensor
-    // my buttons when read are centered at these valies: 0, 144, 329, 504, 741
-    // we add approx 50 to those values and check to see if we are close
-    if (adc_key_in > 1000) return btnNONE; // We make this the 1st option for speed reasons since it will be the most likely result
-    // For V1.1 us this threshold
-    if (adc_key_in < 50)   return btnRIGHT;
-    if (adc_key_in < 200)  return btnUP;
-    if (adc_key_in < 300)  return btnDOWN;
-    if (adc_key_in < 450)  return btnLEFT;
-    if (adc_key_in < 700)  return btnSELECT;
-
-    return btnNONE;  // when all others fail, return this...
-}
-
 void setup() {
     Serial.begin(115200);
     Serial.println("D Startup RMP " VERSION);
@@ -221,7 +203,7 @@ void loop() {
 
     get_message();
 
-    if (now - heartbeat_ts > 20 * 1000) {
+    if (0 && (now - heartbeat_ts > 20 * 1000)) {
         delay(500);
         lcd.clear();
         lcd.setCursor(0, 0);
@@ -229,33 +211,18 @@ void loop() {
         return;
     }
 
-    if (now - button_ts > 200) {
-        int lcd_key = read_LCD_buttons();  // read the buttons
-        button_ts = now;
-        switch (lcd_key)   {
-            case btnRIGHT:
-                mode = 1;
-                break;
-
-            case btnLEFT:
-                mode = 0;
-                break;
-
-            case btnUP:
-                dial_step(1);
-                break;
-
-            case btnDOWN:
-                dial_step(-1);
-                break;
-
-            case btnSELECT:
-                xfer();
-                button_ts += 200;
-                break;
-
-            default:
-                break;
-        }
+    kHz_encoder.tick();
+    int pos = kHz_encoder.getPosition();
+    if (pos > kHz_pos) {
+        int step_time = kHz_encoder.getMillisBetweenRotations();
+        int rpm = kHz_encoder.getRPM();
+        Serial.print(step_time); Serial.print(" "); Serial.println(rpm);
+        //int steps = rpm > 50 ? 10 : 1;
+        int steps = step_time < 150 ? 10 : 1;
+        dial_step(1, 1, steps);
+        kHz_pos = pos;
+    } else if (pos < kHz_pos) {
+        dial_step(1, -1);
+        kHz_pos = pos;
     }
 }
