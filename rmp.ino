@@ -25,10 +25,12 @@
 
 */
 
-#include <Arduino.h>
-#include <LiquidCrystal.h>
-
 #define VERSION "1.0-dev"
+
+#include <Arduino.h>
+#include <LiquidCrystal_I2C.h>
+
+LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
 
 static byte arrow_l[] = {
     B00000,
@@ -49,9 +51,6 @@ static byte arrow_r[] = {
     B01000,
     B00000,
 };
-
-// select the pins used on the LCD panel
-LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
 
 int active_mHz = 118;
 int active_kHz = 0;
@@ -204,7 +203,9 @@ void setup() {
     Serial.begin(115200);
     Serial.println("D Startup RMP " VERSION);
 
-    lcd.begin(16, 2);
+    lcd.init();
+    lcd.backlight();
+
     lcd.createChar(1, arrow_l);
     lcd.createChar(2, arrow_r);
 
