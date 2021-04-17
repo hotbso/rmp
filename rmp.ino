@@ -32,7 +32,7 @@
 #include <RotaryEncoder.h>
 
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
-RotaryEncoder kHz_encoder(13, 12, RotaryEncoder::LatchMode::FOUR3);
+RotaryEncoder kHz_encoder(12, 11, RotaryEncoder::LatchMode::FOUR3);
 
 static byte arrow_l[] = {
     B00000,
@@ -70,13 +70,17 @@ int inbuff_nxt = 0;
 int mHz_pos, kHz_pos;
 float kHz_step_time;
 static const float EXP_SMOOTH = 0.3;
+int active;
 
 void
 update_display() {
     char buff[17];
-    lcd.clear();
-    lcd.setCursor(0, 0);
-    lcd.print("Active   Standby");
+    if (! active) {
+        active = 1;
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Active   Standby");
+    }
 
     lcd.setCursor(0, 1);
     snprintf(buff, sizeof(buff), "%3d.%03d\001\002%3d.%03d", active_mHz, active_kHz, stdby_mHz, stdby_kHz);
@@ -123,7 +127,7 @@ dial_step(int mode, int dir, int steps = 1) {
         } while (steps > 0);
     }
 
-    send_message('S');
+    //send_message('S');
     update_display();
 }
 
@@ -207,18 +211,22 @@ void loop() {
 
     get_message();
 
-    if (0 && (now - heartbeat_ts > 20 * 1000)) {
+#if 0
+    if (now - heartbeat_ts > 20 * 1000) {
         delay(500);
         lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Waiting for sim");
+        active = 0;
         return;
     }
+#endif
 
     kHz_encoder.tick();
     int pos = kHz_encoder.getPosition();
     if (pos != kHz_pos) {
-        int step_time = kHz_encoder.getMillisBetweenRotations();
+        int step_time = min(500, kHz_encoder.getMillisBetweenRotations());
+
         kHz_step_time =  EXP_SMOOTH * step_time + (1.0 - EXP_SMOOTH) * kHz_step_time;
         int rpm = kHz_encoder.getRPM();
         Serial.print(step_time); Serial.print(" "); Serial.print(kHz_step_time); Serial.print(" "); Serial.println(rpm);
