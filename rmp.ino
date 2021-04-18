@@ -30,9 +30,13 @@
 #include <Arduino.h>
 #include <LiquidCrystal_I2C.h>
 #include <RotaryEncoder.h>
+#include <ButtonDebounce.h>
 
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
 RotaryEncoder kHz_encoder(12, 11, RotaryEncoder::LatchMode::FOUR3);
+ButtonDebounce xfer_btn(10, 100);
+RotaryEncoder mHz_encoder(9, 8, RotaryEncoder::LatchMode::FOUR3);
+RotaryEncoder trim_encoder(7, 6, RotaryEncoder::LatchMode::FOUR3);
 
 static byte arrow_l[] = {
     B00000,
@@ -60,14 +64,13 @@ int active_mHz = 118;
 int active_kHz = 0;
 int stdby_mHz = 122;
 int stdby_kHz = 800;
-int mode = 1;
-
+char trim_dir = '_';
 long heartbeat_ts = -20000000;
 
 char inbuff[50];
 int inbuff_nxt = 0;
 
-int mHz_pos, kHz_pos;
+int mHz_pos, kHz_pos, trim_pos;
 float kHz_step_time;
 static const float EXP_SMOOTH = 0.3;
 int active;
@@ -92,11 +95,14 @@ send_message(char type) {
     char buff[30];
     if ('S' == type) {
         snprintf(buff, sizeof buff, "S%06ld_", stdby_mHz * 1000L + stdby_kHz);
-        Serial.println(buff);
-    } else if ('X' == type) {
+     } else if ('X' == type) {
         snprintf(buff, sizeof buff, "X%06ld%06ld_", active_mHz * 1000L + active_kHz, stdby_mHz * 1000L + stdby_kHz);
-        Serial.println(buff);
-    }
+    } else if ('T' == type) {
+        snprintf(buff, sizeof buff, "T%c_", trim_dir);
+    } else
+        return;
+        
+    Serial.println(buff);
 }
 
 void
@@ -104,9 +110,9 @@ dial_step(int mode, int dir, int steps = 1) {
     if (0 == mode) {
         stdby_mHz += dir;
         if (stdby_mHz < 118)
-            stdby_mHz = 135;
-        else if (stdby_mHz > 135)
             stdby_mHz = 118;
+        else if (stdby_mHz > 135)
+            stdby_mHz = 135;
     } else {
         do  {
             int kHz8 = stdby_kHz % 25;
@@ -127,12 +133,15 @@ dial_step(int mode, int dir, int steps = 1) {
         } while (steps > 0);
     }
 
-    //send_message('S');
+    send_message('S');
     update_display();
 }
 
 void
-xfer() {
+xfer(const int state) {
+    if (state != 1)
+        return;
+
     int t = active_mHz; active_mHz = stdby_mHz; stdby_mHz = t;
     t = active_kHz; active_kHz = stdby_kHz; stdby_kHz = t;
 
@@ -192,7 +201,7 @@ get_message() {
 void setup() {
     Serial.begin(115200);
     Serial.println("D Startup RMP " VERSION);
-
+    xfer_btn.setCallback(xfer);
     lcd.init();
     lcd.backlight();
 
@@ -223,16 +232,33 @@ void loop() {
 #endif
 
     kHz_encoder.tick();
+    mHz_encoder.tick();
     int pos = kHz_encoder.getPosition();
     if (pos != kHz_pos) {
         int step_time = min(500, kHz_encoder.getMillisBetweenRotations());
 
+        // exponential smoother for step time
         kHz_step_time =  EXP_SMOOTH * step_time + (1.0 - EXP_SMOOTH) * kHz_step_time;
-        int rpm = kHz_encoder.getRPM();
-        Serial.print(step_time); Serial.print(" "); Serial.print(kHz_step_time); Serial.print(" "); Serial.println(rpm);
-        //int steps = rpm > 50 ? 10 : 1;
+        //Serial.print(step_time); Serial.print(" "); Serial.println(kHz_step_time);
         int steps = kHz_step_time < 150.0 ? 10 : 1;
         dial_step(1, pos > kHz_pos ? 1 : -1, steps);
         kHz_pos = pos;
     }
-}
+
+    pos = mHz_encoder.getPosition();
+    if (pos != mHz_pos) {
+        dial_step(0, pos > mHz_pos ? 1 : -1);
+        mHz_pos = pos;
+    }
+
+    trim_encoder.tick();
+    pos = trim_encoder.getPosition();
+    if (pos != trim_pos) {
+        trim_dir = pos < trim_pos ? 'D' : 'U';
+        send_message('T');
+        trim_pos = pos;
+    }
+
+
+    xfer_btn.update();
+ }
