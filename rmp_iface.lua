@@ -26,7 +26,7 @@
 
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ start of customizations ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-local port = "COM4"
+local port = "COM3"
 
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ end of customizations ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -54,6 +54,18 @@ function rmp_data(h, data, len)
         local s = tonumber(data:sub(2, 7))
         ipc.log("s = " .. s)
         ipc.writeSD(ofs_stdby, s * 1000)
+        return
+    end
+
+    if data:sub(1, 2) == "TD" then
+        ipc.log("TD")
+        ipc.control(65607) -- trim down
+        return
+    end
+
+    if data:sub(1, 2) == "TU" then
+        ipc.log("TU")
+        ipc.control(65615) -- trim up
         return
     end
 end
