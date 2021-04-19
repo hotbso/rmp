@@ -36,7 +36,10 @@ LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
 RotaryEncoder kHz_encoder(12, 11, RotaryEncoder::LatchMode::FOUR3);
 ButtonDebounce xfer_btn(10, 100);
 RotaryEncoder mHz_encoder(9, 8, RotaryEncoder::LatchMode::FOUR3);
-RotaryEncoder trim_encoder(7, 6, RotaryEncoder::LatchMode::FOUR3);
+RotaryEncoder trim_encoder(6, 7, RotaryEncoder::LatchMode::FOUR3);
+
+// time to keep display on after activity
+#define DISPLAY_ON_SEC 600
 
 static byte arrow_l[] = {
     B00000,
@@ -66,11 +69,11 @@ int stdby_mHz = 122;
 int stdby_kHz = 800;
 char trim_dir = '_';
 long heartbeat_ts = -20000000;
+long display_off_ts;
 
 char inbuff[50];
 int inbuff_nxt = 0;
 
-int mHz_pos, kHz_pos, trim_pos;
 float kHz_step_time;
 static const float EXP_SMOOTH = 0.3;
 int active;
@@ -95,20 +98,29 @@ send_message(char type) {
     char buff[30];
     if ('S' == type) {
         snprintf(buff, sizeof buff, "S%06ld_", stdby_mHz * 1000L + stdby_kHz);
-     } else if ('X' == type) {
+    } else if ('X' == type) {
         snprintf(buff, sizeof buff, "X%06ld%06ld_", active_mHz * 1000L + active_kHz, stdby_mHz * 1000L + stdby_kHz);
     } else if ('T' == type) {
         snprintf(buff, sizeof buff, "T%c_", trim_dir);
     } else
         return;
-        
+
     Serial.println(buff);
 }
 
 void
-dial_step(int mode, int dir, int steps = 1) {
+dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
+    long now = millis();
+
+    // if display is off just switch it on on first freq change
+    if (now > display_off_ts) {
+        lcd.backlight();
+        display_off_ts = now + (long)DISPLAY_ON_SEC * 1000;
+        return;
+    }
+
     if (0 == mode) {
-        stdby_mHz += dir;
+        stdby_mHz += (int)dir;
         if (stdby_mHz < 118)
             stdby_mHz = 118;
         else if (stdby_mHz > 135)
@@ -117,11 +129,11 @@ dial_step(int mode, int dir, int steps = 1) {
         do  {
             int kHz8 = stdby_kHz % 25;
             if (0 == kHz8) {
-                stdby_kHz += (dir > 0) ? 5 : -10;
+                stdby_kHz += (dir == RotaryEncoder::Direction::CLOCKWISE) ? 5 : -10;
             } else if (15 == kHz8) {
-                stdby_kHz += (dir > 0) ? 10 : -5;
+                stdby_kHz += (dir == RotaryEncoder::Direction::CLOCKWISE) ? 10 : -5;
             } else {
-                stdby_kHz += dir * 5;
+                stdby_kHz += (int)dir * 5;
             }
 
             if (stdby_kHz < 0)
@@ -152,9 +164,8 @@ xfer(const int state) {
 void
 process_message(const char *msg) {
     long a, s;
-    int cksum;
-    int res = sscanf(msg + 1, "%06ld%06ld%1x", &a, &s, &cksum);
-    if (res != 3) {
+    int res = sscanf(msg + 1, "%06ld%06ld_", &a, &s);
+    if (res != 2) {
         Serial.print("D error parsing >>>>"); Serial.print(msg); Serial.println("<<<<");
         return;
     }
@@ -211,21 +222,30 @@ void setup() {
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("rmp " VERSION);
-    delay(2000);
+    delay(3000);
+    display_off_ts = millis() + 30L * 1000;
+    active = 1; // for first loop run
 }
 
 
 void loop() {
     long now = millis();
+    if (now > display_off_ts) {
+        lcd.noBacklight();
+    }
 
     get_message();
 
-#if 0
+#if 1
     if (now - heartbeat_ts > 20 * 1000) {
-        delay(500);
-        lcd.clear();
-        lcd.setCursor(0, 0);
-        lcd.print("Waiting for sim");
+
+        if (active) {
+            lcd.clear();
+            lcd.setCursor(0, 0);
+            lcd.print("Waiting for sim");
+            display_off_ts = now + 30L * 1000;
+        }
+
         active = 0;
         return;
     }
@@ -233,32 +253,29 @@ void loop() {
 
     kHz_encoder.tick();
     mHz_encoder.tick();
-    int pos = kHz_encoder.getPosition();
-    if (pos != kHz_pos) {
+    RotaryEncoder::Direction dir = kHz_encoder.getDirection();
+    if (dir != RotaryEncoder::Direction::NOROTATION) {
         int step_time = min(500, kHz_encoder.getMillisBetweenRotations());
 
         // exponential smoother for step time
         kHz_step_time =  EXP_SMOOTH * step_time + (1.0 - EXP_SMOOTH) * kHz_step_time;
         //Serial.print(step_time); Serial.print(" "); Serial.println(kHz_step_time);
         int steps = kHz_step_time < 150.0 ? 10 : 1;
-        dial_step(1, pos > kHz_pos ? 1 : -1, steps);
-        kHz_pos = pos;
+        dial_step(1, dir, steps);
     }
 
-    pos = mHz_encoder.getPosition();
-    if (pos != mHz_pos) {
-        dial_step(0, pos > mHz_pos ? 1 : -1);
-        mHz_pos = pos;
+    dir = mHz_encoder.getDirection();
+    if (dir != RotaryEncoder::Direction::NOROTATION) {
+        dial_step(0, dir);
     }
 
     trim_encoder.tick();
-    pos = trim_encoder.getPosition();
-    if (pos != trim_pos) {
-        trim_dir = pos < trim_pos ? 'D' : 'U';
+    dir = trim_encoder.getDirection();
+    if (dir != RotaryEncoder::Direction::NOROTATION) {
+        trim_dir = (dir == RotaryEncoder::Direction::CLOCKWISE) ? 'D' : 'U';
         send_message('T');
-        trim_pos = pos;
     }
 
 
     xfer_btn.update();
- }
+}
