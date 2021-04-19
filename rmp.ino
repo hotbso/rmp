@@ -116,7 +116,7 @@ dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
     if (now > display_off_ts) {
         lcd.backlight();
         display_off_ts = now + (long)DISPLAY_ON_SEC * 1000;
-        return;
+        update_display();
     }
 
     if (0 == mode) {
@@ -247,7 +247,6 @@ void loop() {
         }
 
         active = 0;
-        return;
     }
 #endif
 
