@@ -75,7 +75,7 @@ long display_off_ts;
 char inbuff[50];
 int inbuff_nxt = 0;
 
-float kHz_step_time;
+float kHz_step_time, mHz_step_time;
 static const float EXP_SMOOTH = 0.3;
 int active;
 
@@ -170,8 +170,9 @@ xfer(const int state) {
 // Process a received message
 void
 process_message(const char *msg) {
-    long a, s;
     if (('H' == msg[0]) && (14 == strlen(msg))) {
+        long a, s;
+
         int res = sscanf(msg + 1, "%06ld%06ld_", &a, &s);
         if (res != 2)
             goto error;
@@ -184,6 +185,7 @@ process_message(const char *msg) {
         goto error;
 
     return;
+
 error:
     Serial.print("D error parsing >>>>"); Serial.print(msg); Serial.println("<<<<");
     return;
@@ -281,7 +283,10 @@ void loop() {
 
     dir = mHz_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
-        dial_step(0, dir);
+        int step_time = min(500, mHz_encoder.getMillisBetweenRotations());
+        mHz_step_time =  EXP_SMOOTH * step_time + (1.0 - EXP_SMOOTH) * mHz_step_time;
+        int steps = mHz_step_time < 200.0 ? 3 : 1;
+        dial_step(0, dir, steps);
     }
 
     trim_encoder.tick();
