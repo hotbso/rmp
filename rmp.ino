@@ -32,6 +32,7 @@
 #include <RotaryEncoder.h>
 #include <ButtonDebounce.h>
 
+// define your wiring here
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
 RotaryEncoder kHz_encoder(12, 11, RotaryEncoder::LatchMode::FOUR3);
 ButtonDebounce xfer_btn(10, 100);
@@ -93,6 +94,7 @@ update_display() {
     lcd.print(buff);
 }
 
+// send message to p3d
 void
 send_message(char type) {
     char buff[30];
@@ -108,6 +110,7 @@ send_message(char type) {
     Serial.println(buff);
 }
 
+// process one dial step for frequency
 void
 dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
     long now = millis();
@@ -121,6 +124,7 @@ dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
 
     if (0 == mode) {
         stdby_mHz += (int)dir;
+        // the mHz don't wrap
         if (stdby_mHz < 118)
             stdby_mHz = 118;
         else if (stdby_mHz > 135)
@@ -128,6 +132,7 @@ dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
     } else {
         do  {
             int kHz8 = stdby_kHz % 25;
+            // wrap the kHz
             if (0 == kHz8) {
                 stdby_kHz += (dir == RotaryEncoder::Direction::CLOCKWISE) ? 5 : -10;
             } else if (15 == kHz8) {
@@ -149,6 +154,7 @@ dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
     update_display();
 }
 
+// Send XFER message
 void
 xfer(const int state) {
     if (state != 1)
@@ -161,21 +167,30 @@ xfer(const int state) {
     update_display();
 }
 
+// Process a received message
 void
 process_message(const char *msg) {
     long a, s;
-    int res = sscanf(msg + 1, "%06ld%06ld_", &a, &s);
-    if (res != 2) {
-        Serial.print("D error parsing >>>>"); Serial.print(msg); Serial.println("<<<<");
-        return;
-    }
+    if (('H' == msg[0]) && (14 == strlen(msg))) {
+        int res = sscanf(msg + 1, "%06ld%06ld_", &a, &s);
+        if (res != 2)
+            goto error;
 
-    active_mHz = a / 1000; active_kHz = a % 1000;
-    stdby_mHz = s / 1000; stdby_kHz = s % 1000;
-    update_display();
-    heartbeat_ts = millis();
+        active_mHz = a / 1000; active_kHz = a % 1000;
+        stdby_mHz = s / 1000; stdby_kHz = s % 1000;
+        update_display();
+        heartbeat_ts = millis();
+    } else
+        goto error;
+
+    return;
+error:
+    Serial.print("D error parsing >>>>"); Serial.print(msg); Serial.println("<<<<");
+    return;
+
 }
 
+// assemble a message i.e. chars until a lf
 int
 get_message() {
     int na = Serial.available();
@@ -200,6 +215,8 @@ get_message() {
             //Serial.println(inbuff);
 
             process_message(inbuff);
+
+            // shift remainder downwards
             int remain = inbuff_nxt - i;
             memcpy(inbuff, inbuff + i, remain);
             inbuff_nxt = remain;
@@ -224,7 +241,6 @@ void setup() {
     lcd.print("rmp " VERSION);
     delay(3000);
     display_off_ts = millis() + 30L * 1000;
-    active = 1; // for first loop run
 }
 
 
@@ -234,11 +250,8 @@ void loop() {
         lcd.noBacklight();
     }
 
-    get_message();
-
-#if 1
     if (now - heartbeat_ts > 20 * 1000) {
-
+        // catch transition to inactive
         if (active) {
             lcd.clear();
             lcd.setCursor(0, 0);
@@ -248,12 +261,15 @@ void loop() {
 
         active = 0;
     }
-#endif
+
+    get_message();
+
 
     kHz_encoder.tick();
     mHz_encoder.tick();
     RotaryEncoder::Direction dir = kHz_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
+        // implement progressive dialing
         int step_time = min(500, kHz_encoder.getMillisBetweenRotations());
 
         // exponential smoother for step time
