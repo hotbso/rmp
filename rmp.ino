@@ -40,7 +40,8 @@ RotaryEncoder mHz_encoder(9, 8, RotaryEncoder::LatchMode::FOUR3);
 RotaryEncoder trim_encoder(6, 7, RotaryEncoder::LatchMode::FOUR3);
 
 // time to keep display on after activity
-#define DISPLAY_ON_SEC 600
+#define DISPLAY_ON_DIAL_SEC 600L
+#define DISPLAY_ON_XFER_SEC 1800L       // if xfer is pressed it's likely that it's really used
 
 static byte arrow_l[] = {
     B00000,
@@ -118,8 +119,9 @@ dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
     // if display is off just switch it on on first freq change
     if (now > display_off_ts) {
         lcd.backlight();
-        display_off_ts = now + (long)DISPLAY_ON_SEC * 1000;
         update_display();
+        display_off_ts = now + DISPLAY_ON_DIAL_SEC * 1000;
+        return;
     }
 
     if (0 == mode) {
@@ -150,11 +152,12 @@ dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
         } while (steps > 0);
     }
 
-    send_message('S');
+    display_off_ts = max(display_off_ts, now + DISPLAY_ON_DIAL_SEC * 1000);
     update_display();
+    send_message('S');
 }
 
-// Send XFER message
+// button press callback, send XFER message
 void
 xfer(const int state) {
     if (state != 1)
@@ -163,8 +166,16 @@ xfer(const int state) {
     int t = active_mHz; active_mHz = stdby_mHz; stdby_mHz = t;
     t = active_kHz; active_kHz = stdby_kHz; stdby_kHz = t;
 
-    send_message('X');
+    long now = millis();
+
+    // if display is off just switch it on on first freq change
+    if (now > display_off_ts)
+        lcd.backlight();
+
     update_display();
+    display_off_ts = now + DISPLAY_ON_XFER_SEC * 1000;
+
+    send_message('X');
 }
 
 // Process a received message
@@ -251,7 +262,7 @@ void loop() {
     if (now > display_off_ts) {
         lcd.noBacklight();
     }
-
+#if 0
     if (now - heartbeat_ts > 20 * 1000) {
         // catch transition to inactive
         if (active) {
@@ -263,7 +274,7 @@ void loop() {
 
         active = 0;
     }
-
+#endif
     get_message();
 
 
