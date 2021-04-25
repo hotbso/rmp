@@ -202,39 +202,31 @@ error:
 }
 
 // assemble a message i.e. chars until a lf
-int
-get_message() {
-    int na = Serial.available();
-    if (na == 0)
-        return 0;
-
-    int nr = min(na, sizeof(inbuff) - inbuff_nxt - 1);   // always keep last 0
-    int res = Serial.readBytes(inbuff + inbuff_nxt, nr);
-    //Serial.print(nr); Serial.print(" "); Serial.println(inbuff_nxt);
-    if (res <= 0) {
-        Serial.println("short read");
-    }
-    inbuff_nxt += res;
-    inbuff[inbuff_nxt] = '\0';
-    for (int i = 0; i < inbuff_nxt; i++) {
-        if (inbuff[i] == '\n') {
-            if (i > 0 && inbuff[i - 1] == '\r') // always remove a possible CR
-                inbuff[i - 1] = '\0';
-
-            inbuff[i++] = '\0';
-
-            //Serial.println(inbuff);
-
-            process_message(inbuff);
-
-            // shift remainder downwards
-            int remain = inbuff_nxt - i;
-            memcpy(inbuff, inbuff + i, remain);
-            inbuff_nxt = remain;
+void get_message() {
+    while (Serial.available() > 0) {
+        int c = Serial.read();
+        if (c < 0) {
+            Serial.println("D read error");
+            return;
         }
 
+        if ('\r' == c)  // drop CR
+            continue;
+
+        if ('\n' == c) {
+            inbuff[inbuff_nxt] = '\0';
+            process_message(inbuff);
+            inbuff_nxt = '\0';
+            continue;
+        }
+
+        inbuff[inbuff_nxt++] = c;
+        if (inbuff_nxt == sizeof(inbuff)) {
+            inbuff_nxt = 0;
+            Serial.println("D receiving garbage");
+            continue;
+        }
     }
-    return 0;
 }
 
 int progressive_dial(long step_time, const int max_steps) {
