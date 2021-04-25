@@ -72,13 +72,11 @@ int stdby_kHz = 800;
 char trim_dir = '_';
 long heartbeat_ts = -20000000;
 long display_off_ts;
+int active;
 
 char inbuff[50];
 int inbuff_nxt = 0;
 
-float kHz_step_time, mHz_step_time;
-static const float EXP_SMOOTH = 0.3;
-int active;
 
 void
 update_display() {
@@ -239,6 +237,20 @@ get_message() {
     return 0;
 }
 
+int progressive_dial(long step_time, const int max_steps) {
+    constexpr float exp_smooth = 0.7;
+    constexpr float min_step_time = 20.0;
+    constexpr float max_step_time = 150.0;
+    static float step_time_sm; // smoothed steptime, as dials are not used simultaniously we use the same variable
+
+    // exponential smoother for step time
+    step_time_sm =  min(max_step_time, max(min_step_time, exp_smooth * step_time + (1.0 - exp_smooth) * step_time));
+
+    int steps = 1 + (max_step_time - step_time_sm) / (max_step_time - min_step_time) * max_steps;
+    // Serial.print(step_time); Serial.print(" "); Serial.print(step_time_sm); Serial.print(" "); Serial.println(steps);
+    return steps;
+}
+
 void setup() {
     Serial.begin(115200);
     Serial.println("D Startup RMP " VERSION);
@@ -262,7 +274,7 @@ void loop() {
     if (now > display_off_ts) {
         lcd.noBacklight();
     }
-#if 0
+
     if (now - heartbeat_ts > 20 * 1000) {
         // catch transition to inactive
         if (active) {
@@ -274,29 +286,21 @@ void loop() {
 
         active = 0;
     }
-#endif
+
     get_message();
 
 
     kHz_encoder.tick();
-    mHz_encoder.tick();
     RotaryEncoder::Direction dir = kHz_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
-        // implement progressive dialing
-        int step_time = min(500, kHz_encoder.getMillisBetweenRotations());
-
-        // exponential smoother for step time
-        kHz_step_time =  EXP_SMOOTH * step_time + (1.0 - EXP_SMOOTH) * kHz_step_time;
-        //Serial.print(step_time); Serial.print(" "); Serial.println(kHz_step_time);
-        int steps = kHz_step_time < 150.0 ? 10 : 1;
+        int steps = progressive_dial(kHz_encoder.getMillisBetweenRotations(), 10);
         dial_step(1, dir, steps);
     }
 
+    mHz_encoder.tick();
     dir = mHz_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
-        int step_time = min(500, mHz_encoder.getMillisBetweenRotations());
-        mHz_step_time =  EXP_SMOOTH * step_time + (1.0 - EXP_SMOOTH) * mHz_step_time;
-        int steps = mHz_step_time < 200.0 ? 3 : 1;
+        int steps = progressive_dial(mHz_encoder.getMillisBetweenRotations(), 4);
         dial_step(0, dir, steps);
     }
 
