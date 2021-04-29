@@ -75,7 +75,7 @@ long display_off_ts;
 int active;
 
 char inbuff[50];
-int inbuff_nxt = 0;
+int inbuff_len = 0;
 
 
 void
@@ -178,8 +178,8 @@ xfer(const int state) {
 
 // Process a received message
 void
-process_message(const char *msg) {
-    if (('H' == msg[0]) && (14 == strlen(msg))) {
+process_message(const char *msg, int len) {
+    if (('H' == msg[0]) && (14 == len)) {
         long a, s;
 
         int res = sscanf(msg + 1, "%06ld%06ld_", &a, &s);
@@ -203,28 +203,22 @@ error:
 
 // assemble a message i.e. chars until a lf
 void get_message() {
-    while (Serial.available() > 0) {
-        int c = Serial.read();
-        if (c < 0) {
-            Serial.println("D read error");
-            return;
-        }
-
+    int c;
+    while ((c = Serial.read()) > 0) {
         if ('\r' == c)  // drop CR
             continue;
 
         if ('\n' == c) {
-            inbuff[inbuff_nxt] = '\0';
-            process_message(inbuff);
-            inbuff_nxt = '\0';
+            inbuff[inbuff_len] = '\0';
+            process_message(inbuff, inbuff_len);
+            inbuff_len = 0;
             continue;
         }
 
-        inbuff[inbuff_nxt++] = c;
-        if (inbuff_nxt == sizeof(inbuff)) {
-            inbuff_nxt = 0;
+        inbuff[inbuff_len++] = c;
+        if (inbuff_len == sizeof(inbuff)) {
+            inbuff_len = 0;
             Serial.println("D receiving garbage");
-            continue;
         }
     }
 }
@@ -233,13 +227,15 @@ int progressive_dial(long step_time, const int max_steps) {
     constexpr float exp_smooth = 0.7;
     constexpr float min_step_time = 20.0;
     constexpr float max_step_time = 150.0;
-    static float step_time_sm; // smoothed steptime, as dials are not used simultaniously we use the same variable
+
+    static float step_time_sm; // smoothed steptime, as dials are not used simultaneously we use the same variable
 
     // exponential smoother for step time
     step_time_sm =  min(max_step_time, max(min_step_time, exp_smooth * step_time + (1.0 - exp_smooth) * step_time));
 
     int steps = 1 + (max_step_time - step_time_sm) / (max_step_time - min_step_time) * max_steps;
-    // Serial.print(step_time); Serial.print(" "); Serial.print(step_time_sm); Serial.print(" "); Serial.println(steps);
+
+    //Serial.print(step_time); Serial.print(" "); Serial.print(step_time_sm); Serial.print(" "); Serial.println(steps);
     return steps;
 }
 
