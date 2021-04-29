@@ -231,7 +231,7 @@ int progressive_dial(long step_time, const int max_steps) {
     static float step_time_sm; // smoothed steptime, as dials are not used simultaneously we use the same variable
 
     // exponential smoother for step time
-    step_time_sm =  min(max_step_time, max(min_step_time, exp_smooth * step_time + (1.0 - exp_smooth) * step_time));
+    step_time_sm =  min(max_step_time, max(min_step_time, exp_smooth * step_time + (1.0 - exp_smooth) * step_time_sm));
 
     int steps = 1 + (max_step_time - step_time_sm) / (max_step_time - min_step_time) * max_steps;
 
