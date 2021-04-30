@@ -28,6 +28,7 @@
 #define VERSION "1.0-dev"
 
 #include <Arduino.h>
+#include <limits.h>
 #include <LiquidCrystal_I2C.h>
 #include <RotaryEncoder.h>
 #include <ButtonDebounce.h>
@@ -42,6 +43,71 @@ RotaryEncoder trim_encoder(6, 7, RotaryEncoder::LatchMode::FOUR3);
 // time to keep display on after activity
 #define DISPLAY_ON_DIAL_SEC 600L
 #define DISPLAY_ON_XFER_SEC 1800L       // if xfer is pressed it's likely that it's really used
+
+//
+// acceleration on continous turns
+//
+class ProgressiveDial {
+    private:
+        int _max_steps;
+        static constexpr int _nbuf = 30;
+        long _ts[_nbuf];
+        int _head = 0;
+
+    public:
+        ProgressiveDial(const int max_steps) {
+            _max_steps = max_steps;
+            _ts[_nbuf - 1] = -LONG_MAX;
+        }
+
+        int steps(void) {
+            // save ts of call
+            long now = millis();
+            _ts[_head] = now;
+
+            // count clicks in 1s,2s,3s,4s
+            int clicks_1s = 1;
+            int clicks_2s = 1;
+            int clicks_3s = 1;
+            int clicks_4s = 1;
+
+            int i = _head - 1;
+            while (1) {
+                if (i < 0) i = _nbuf - 1;
+                if (i == _head) break;
+                if (_ts[i] > now - 1000) clicks_1s++;
+                if (_ts[i] > now - 2000) clicks_2s++;
+                if (_ts[i] > now - 3000) clicks_3s++;
+                if (_ts[i] > now - 4000)
+                    clicks_4s++;
+                else
+                    break;
+
+                i--;
+            }
+
+            if (++_head == _nbuf)
+                _head = 0;
+
+            //Serial.print("1s: "); Serial.print(clicks_1s); Serial.print(", 2s: "); Serial.print(clicks_2s);
+            //Serial.print(", 3s: "); Serial.print(clicks_3s); Serial.print(", 4s: "); Serial.println(clicks_4s);
+
+            // fine tuning
+            if (clicks_1s <= 4) return 1;
+            if (clicks_2s <= 8) return 2;
+
+            // clearly continuous dialing
+            if (clicks_4s >= 20) return _max_steps;
+            if (clicks_4s >= 15) return (2 * _max_steps) / 3;
+
+            // something in between
+            if (clicks_4s > 10) return _max_steps / 2;
+            return 2;
+        }
+};
+
+ProgressiveDial kHz_dial(10);
+ProgressiveDial mHz_dial(4);
 
 static byte arrow_l[] = {
     B00000,
@@ -70,7 +136,7 @@ int active_kHz = 0;
 int stdby_mHz = 122;
 int stdby_kHz = 800;
 char trim_dir = '_';
-long heartbeat_ts = -20000000;
+long heartbeat_ts = -LONG_MAX;
 long display_off_ts;
 int active;
 
@@ -223,21 +289,6 @@ void get_message() {
     }
 }
 
-int progressive_dial(long step_time, const int max_steps) {
-    constexpr float exp_smooth = 0.7;
-    constexpr float min_step_time = 20.0;
-    constexpr float max_step_time = 150.0;
-
-    static float step_time_sm; // smoothed steptime, as dials are not used simultaneously we use the same variable
-
-    // exponential smoother for step time
-    step_time_sm =  min(max_step_time, max(min_step_time, exp_smooth * step_time + (1.0 - exp_smooth) * step_time_sm));
-
-    int steps = 1 + (max_step_time - step_time_sm) / (max_step_time - min_step_time) * max_steps;
-
-    //Serial.print(step_time); Serial.print(" "); Serial.print(step_time_sm); Serial.print(" "); Serial.println(steps);
-    return steps;
-}
 
 void setup() {
     Serial.begin(115200);
@@ -281,14 +332,14 @@ void loop() {
     kHz_encoder.tick();
     RotaryEncoder::Direction dir = kHz_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
-        int steps = progressive_dial(kHz_encoder.getMillisBetweenRotations(), 10);
+        int steps = kHz_dial.steps();
         dial_step(1, dir, steps);
     }
 
     mHz_encoder.tick();
     dir = mHz_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
-        int steps = progressive_dial(mHz_encoder.getMillisBetweenRotations(), 4);
+        int steps = mHz_dial.steps();
         dial_step(0, dir, steps);
     }
 
