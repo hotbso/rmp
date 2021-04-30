@@ -32,13 +32,15 @@
 #include <LiquidCrystal_I2C.h>
 #include <RotaryEncoder.h>
 #include <ButtonDebounce.h>
+#include "rmp_wiring.h"
+
 
 // define your wiring here
-LiquidCrystal_I2C lcd = LiquidCrystal_I2C(0x27, 16, 2);
-RotaryEncoder kHz_encoder(12, 11, RotaryEncoder::LatchMode::FOUR3);
-ButtonDebounce xfer_btn(10, 100);
-RotaryEncoder mHz_encoder(9, 8, RotaryEncoder::LatchMode::FOUR3);
-RotaryEncoder trim_encoder(6, 7, RotaryEncoder::LatchMode::FOUR3);
+LiquidCrystal_I2C lcd = LiquidCrystal_I2C(lcd_I2C, 16, 2);
+RotaryEncoder kHz_encoder(kHz_encoder_pin1, kHz_encoder_pin2, RotaryEncoder::LatchMode::FOUR3);
+ButtonDebounce xfer_btn(xfer_button_bin_pin, 100);
+RotaryEncoder mHz_encoder(mHz_encoder_pin1, mHz_encoder_pin2, RotaryEncoder::LatchMode::FOUR3);
+RotaryEncoder trim_encoder(trim_encoder_pin1, trim_encoder_pin2, RotaryEncoder::LatchMode::FOUR3);
 
 // time to keep display on after activity
 #define DISPLAY_ON_DIAL_SEC 600L
