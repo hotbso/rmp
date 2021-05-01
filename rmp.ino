@@ -52,7 +52,7 @@ RotaryEncoder trim_encoder(trim_encoder_pin1, trim_encoder_pin2, RotaryEncoder::
 class ProgressiveDial {
     private:
         int _max_steps;
-        static constexpr int _nbuf = 30;
+        static constexpr int _nbuf = 25;
         long _ts[_nbuf];
         int _head = 0;
 
@@ -98,12 +98,11 @@ class ProgressiveDial {
             if (clicks_1s <= 4) return 1;
             if (clicks_2s <= 8) return 2;
 
-            // clearly continuous dialing
-            if (clicks_4s >= 20) return _max_steps;
-            if (clicks_4s >= 15) return (2 * _max_steps) / 3;
+            // ramp up to max_steps between 9 and max
+            if (clicks_4s > 8) {
+                return round(4 + (clicks_4s - 8.0) / (_nbuf - 8) * (_max_steps - 4));
+            }
 
-            // something in between
-            if (clicks_4s > 10) return _max_steps / 2;
             return 2;
         }
 };
@@ -177,9 +176,10 @@ send_message(char type) {
     Serial.println(buff);
 }
 
-// process one dial step for frequency
+// process dial steps for frequency
 void
 dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
+    Serial.print("steps: "); Serial.println(steps);
     long now = millis();
 
     // if display is off just switch it on on first freq change
@@ -329,7 +329,6 @@ void loop() {
     }
 
     get_message();
-
 
     kHz_encoder.tick();
     RotaryEncoder::Direction dir = kHz_encoder.getDirection();
