@@ -26,10 +26,18 @@
 
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ start of customizations ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-local port = "COM3"
+-- empty
 
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ end of customizations ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+local script_directory = debug.getinfo(1, "S").source:sub(2)
+script_directory = script_directory:match("(.*[/\\])")
+
+local f = io.open(script_directory .. "rmp_iface.cfg")
+local port = f:read("*line")
+f:close()
+
+ipc.log("port: " .. port)
 local rmp  = com.open(port, 115200, 0)
 
 local ofs_active = 0x05C4
@@ -52,19 +60,19 @@ function rmp_data(h, data, len)
     
     if data:sub(1, 1) == "S" then
         local s = tonumber(data:sub(2, 7))
-        ipc.log("s = " .. s)
+        -- ipc.log("s = " .. s)
         ipc.writeSD(ofs_stdby, s * 1000)
         return
     end
 
     if data:sub(1, 2) == "TD" then
-        ipc.log("TD")
+        -- ipc.log("TD")
         ipc.control(65607) -- trim down
         return
     end
 
     if data:sub(1, 2) == "TU" then
-        ipc.log("TU")
+        -- ipc.log("TU")
         ipc.control(65615) -- trim up
         return
     end
@@ -90,8 +98,7 @@ end
 event.offset(ofs_stdby, "SD", "rmp_com1_change")
 event.offset(ofs_active, "SD", "rmp_com1_change")
 
-if rmp ~= 0 then
-    event.com(rmp, 150, 1, 10, "rmp_data")
-    event.timer(5 * 1000, "rmp_heartbeat")
-end
+event.com(rmp, 150, 1, 10, "rmp_data")
+event.timer(5 * 1000, "rmp_heartbeat")
+
 
