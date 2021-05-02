@@ -25,8 +25,6 @@
 
 */
 
-#define VERSION "1.0-dev"
-
 #include <Arduino.h>
 #include <limits.h>
 #include <LiquidCrystal_I2C.h>
@@ -34,8 +32,6 @@
 #include <ButtonDebounce.h>
 #include "rmp_wiring.h"
 
-
-// define your wiring here
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(lcd_I2C, 16, 2);
 RotaryEncoder kHz_encoder(kHz_encoder_pin1, kHz_encoder_pin2, RotaryEncoder::LatchMode::FOUR3);
 ButtonDebounce xfer_btn(xfer_button_bin_pin, 100);
@@ -137,7 +133,7 @@ int active_kHz = 0;
 int stdby_mHz = 122;
 int stdby_kHz = 800;
 char trim_dir = '_';
-long heartbeat_ts = -LONG_MAX;
+long heartbeat_ts;
 long display_off_ts;
 int active;
 
@@ -294,7 +290,7 @@ void get_message() {
 
 void setup() {
     Serial.begin(115200);
-    Serial.println("D Startup RMP " VERSION);
+    Serial.println("D Startup RMP " __DATE__ " " __TIME__);
     xfer_btn.setCallback(xfer);
     lcd.init();
     lcd.backlight();
@@ -304,7 +300,10 @@ void setup() {
 
     lcd.clear();
     lcd.setCursor(0, 0);
-    lcd.print("rmp " VERSION);
+    lcd.print("rmp " __DATE__);
+    lcd.setCursor(0, 1);
+    lcd.print(__TIME__);
+
     delay(3000);
     display_off_ts = millis() + 30L * 1000;
 }
@@ -316,7 +315,7 @@ void loop() {
         lcd.noBacklight();
     }
 
-    if (now - heartbeat_ts > 20 * 1000) {
+    if (now - heartbeat_ts > 20L * 1000) {
         // catch transition to inactive
         if (active) {
             lcd.clear();
