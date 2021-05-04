@@ -51,6 +51,7 @@ class ProgressiveDial {
         static constexpr int _nbuf = 25;
         long _ts[_nbuf];
         int _head = 0;
+        RotaryEncoder::Direction _last_dir = RotaryEncoder::Direction::NOROTATION;
 
     public:
         ProgressiveDial(const int max_steps) {
@@ -58,9 +59,17 @@ class ProgressiveDial {
             _ts[_nbuf - 1] = -LONG_MAX;
         }
 
-        int steps(void) {
+        int steps(RotaryEncoder::Direction dir) {
             // save ts of call
             long now = millis();
+
+            // if we reverse direction reinit the array
+            if (dir != _last_dir) {
+                _last_dir = dir;
+                _head = 0;
+                _ts[_nbuf - 1] = -LONG_MAX;
+            }
+
             _ts[_head] = now;
 
             // count clicks in 1s,2s,3s,4s
@@ -332,14 +341,14 @@ void loop() {
     kHz_encoder.tick();
     RotaryEncoder::Direction dir = kHz_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
-        int steps = kHz_dial.steps();
+        int steps = kHz_dial.steps(dir);
         dial_step(1, dir, steps);
     }
 
     mHz_encoder.tick();
     dir = mHz_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
-        int steps = mHz_dial.steps();
+        int steps = mHz_dial.steps(dir);
         dial_step(0, dir, steps);
     }
 
