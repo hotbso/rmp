@@ -33,8 +33,12 @@ constexpr int lcd_I2C = 0x27;
 // encoder digital pins
 constexpr int kHz_encoder_pin1 = 12;
 constexpr int kHz_encoder_pin2 = 11;
+constexpr RotaryEncoder::LatchMode kHz_latch_mode = RotaryEncoder::LatchMode::FOUR3;
+
 constexpr int mHz_encoder_pin1 = 9;
 constexpr int mHz_encoder_pin2 = 8;
+constexpr RotaryEncoder::LatchMode mHz_latch_mode = RotaryEncoder::LatchMode::FOUR3;
+
 constexpr int xfer_button_bin_pin = 10;
 
 #define TRIM_WHEEL 1
@@ -42,4 +46,5 @@ constexpr int xfer_button_bin_pin = 10;
 #ifdef TRIM_WHEEL
 constexpr int trim_encoder_pin1 = 6;
 constexpr int trim_encoder_pin2 = 7;
+constexpr RotaryEncoder::LatchMode trim_latch_mode = RotaryEncoder::LatchMode::FOUR3;
 #endif

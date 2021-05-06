@@ -33,17 +33,21 @@
 #include "rmp_wiring.h"
 
 LiquidCrystal_I2C lcd = LiquidCrystal_I2C(lcd_I2C, 16, 2);
-RotaryEncoder kHz_encoder(kHz_encoder_pin1, kHz_encoder_pin2, RotaryEncoder::LatchMode::FOUR3);
+
+RotaryEncoder kHz_encoder(kHz_encoder_pin1, kHz_encoder_pin2, kHz_latch_mode);
+RotaryEncoder mHz_encoder(mHz_encoder_pin1, mHz_encoder_pin2, mHz_latch_mode);
 ButtonDebounce xfer_btn(xfer_button_bin_pin, 100);
-RotaryEncoder mHz_encoder(mHz_encoder_pin1, mHz_encoder_pin2, RotaryEncoder::LatchMode::FOUR3);
-RotaryEncoder trim_encoder(trim_encoder_pin1, trim_encoder_pin2, RotaryEncoder::LatchMode::FOUR3);
+
+#ifdef TRIM_WHEEL
+RotaryEncoder trim_encoder(trim_encoder_pin1, trim_encoder_pin2, trim_latch_mode);
+#endif
 
 // time to keep display on after activity
 #define DISPLAY_ON_DIAL_SEC 600L
-#define DISPLAY_ON_XFER_SEC 1800L       // if xfer is pressed it's likely that it's really used
+#define DISPLAY_ON_XFER_SEC 2400L       // if xfer is pressed it's likely that it's really used
 
 //
-// acceleration on continous turns
+// acceleration on continuous turns
 //
 class ProgressiveDial {
     private:
@@ -352,13 +356,14 @@ void loop() {
         dial_step(0, dir, steps);
     }
 
+#ifdef TRIM_WHEEL
     trim_encoder.tick();
     dir = trim_encoder.getDirection();
     if (dir != RotaryEncoder::Direction::NOROTATION) {
         trim_dir = (dir == RotaryEncoder::Direction::CLOCKWISE) ? 'D' : 'U';
         send_message('T');
     }
-
+#endif
 
     xfer_btn.update();
 }
