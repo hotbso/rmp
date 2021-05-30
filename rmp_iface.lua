@@ -30,6 +30,14 @@
 
 -- ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ end of customizations ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+_, _, acf_model = string.find(ipc.readSTR(0x3500, 24), "([%a%d]+)")
+ipc.log("ACF model: '" .. acf_model .. "'")
+
+local trim_inc = 0  -- default use trim up/down control
+if acf_model == "AC11" then
+    trim_inc = 256
+end
+
 local script_directory = debug.getinfo(1, "S").source:sub(2)
 script_directory = script_directory:match("(.*[/\\])")
 
@@ -42,6 +50,7 @@ local rmp  = com.open(port, 115200, 0)
 
 local ofs_active = 0x05C4
 local ofs_stdby = 0x05CC
+local ofs_trim = 0x0BC0
 
 function rmp_data(h, data, len)
     if data:sub(len, len) == "\n" then
@@ -67,13 +76,29 @@ function rmp_data(h, data, len)
 
     if data:sub(1, 2) == "TD" then
         -- ipc.log("TD")
-        ipc.control(65607) -- trim down
+        if trim_inc == 0 then
+            ipc.control(65607) -- trim down
+        else
+            local tpos = ipc.readSW(ofs_trim)
+            tpos = tpos - trim_inc
+            if tpos < -16383 then tpos = -16383 end
+            ipc.writeSW(ofs_trim, tpos)
+            ipc.log("tpos = " .. tpos)
+        end
         return
     end
 
     if data:sub(1, 2) == "TU" then
         -- ipc.log("TU")
-        ipc.control(65615) -- trim up
+        if trim_inc == 0 then
+            ipc.control(65615) -- trim up
+        else
+            local tpos = ipc.readSW(ofs_trim)
+            tpos = tpos + trim_inc
+            if tpos > 16383 then tpos = 16383 end
+            ipc.writeSW(ofs_trim, tpos)
+            ipc.log("tpos = " .. tpos)
+        end
         return
     end
 end
