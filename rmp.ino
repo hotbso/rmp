@@ -188,7 +188,7 @@ send_message(char type) {
 // process dial steps for frequency
 void
 dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
-    Serial.print("steps: "); Serial.println(steps);
+    // Serial.print("steps: "); Serial.println(steps);
     long now = millis();
 
     // if display is off just switch it on on first freq change
