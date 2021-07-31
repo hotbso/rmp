@@ -32,15 +32,9 @@ SOFTWARE.
 #include <errno.h>
 
 #include "XPLMPlugin.h"
-#include "XPLMPlanes.h"
-#include "XPLMDisplay.h"
-#include "XPLMGraphics.h"
 #include "XPLMDataAccess.h"
 #include "XPLMUtilities.h"
 #include "XPLMProcessing.h"
-#include "XPLMMenus.h"
-#include "XPWidgets.h"
-#include "XPStandardWidgets.h"
 
 #include "rmpif.h"
 
@@ -57,88 +51,63 @@ static float flight_loop_cb(float unused1, float unused2, int unused3, void *unu
 
 static char xpdir[512];
 static const char *psep;
-static char pref_path[512];
 
-static void
-save_pref()
-{
-    FILE *f = fopen(pref_path, "wb");
-    if (NULL == f)
-        return;
+static int dr_mapped;
+static int error_disabled;
 
-    fputs(port, f); putc('\n', f);
-    fclose(f);
-}
+static char in_msg[100];
+static int in_msg_ptr;
 
-
-static void
-load_pref()
-{
-    FILE *f  = fopen(pref_path, "rb");
-    if (NULL == f)
-        return;
-
-    fgets(port, sizeof(port), f);
-    int len = strlen(port);
-    if ('\n' == port[len - 1]) port[len - 1] = '\0';
-    fclose(f);
-}
-
-static void process_msg(char *msg, int len) {
-    if (msg[0] == 'D') {
-        log_msg(msg);
-    } else if (msg[0] == 'S' && msg[len-1] == '_') {
+static void process_msg(int len) {
+    if (in_msg[0] == 'D') {
+        log_msg(in_msg);
+    } else if (in_msg[0] == 'S' && in_msg[len-1] == '_') {
         long f;
-        if (1 == sscanf(msg, "S%6ld_", &f)) {
+        if (1 == sscanf(in_msg, "S%6ld_", &f)) {
             log_msg("%ld", f);
         } else {
-            log_msg("invalid input ->%s<-", msg);
+            log_msg("invalid input ->%s<-", in_msg);
         }
     }
 }
 
-#if 0
-int main()
+static float
+flight_loop_cb(float elapsed_last_call,
+               float elapsed_last_loop, int counter, void *in_refcon)
 {
-    (void)setvbuf(stdout, NULL, _IONBF, 0);
-    (void)setvbuf(stderr, NULL, _IONBF, 0);
-    
-    if (port_open("COM8") < 0) {
-        port_log_error("open");
-        exit(1);
+    float loop_delay = 0.2f;
+    if (error_disabled)
+        return 60.0;
+
+    char buffer[100];
+    int n;
+    if((n = port_read(buffer, sizeof(buffer))) < 0) {
+        port_log_error("read");
+        error_disabled = 1;
+        loop_delay = 60.0;
+        goto done;
     }
-    
-    char line[100];
-    int ptr = 0;
 
-    while (1) {
-        char buffer[100];
-        int n;
-        if((n = port_read(buffer, sizeof(buffer))) < 0) {
-            port_log_error("read");
-        }
+    if (n == 0)
+        goto done;
 
-        if (n == 0) {
-            Sleep(200);
+    for (int i = 0; i < n; i++) {
+        char c = buffer[i];
+        if (c == '\r') continue;
+        if (c == '\n') {
+            in_msg[in_msg_ptr] = '\0';
+            log_msg("->%s<-\n", in_msg);
+            process_msg(in_msg_ptr);
+            in_msg_ptr = 0;
             continue;
         }
-
-        for (int i = 0; i < n; i++) {
-            char c = buffer[i];
-            if (c == '\r') continue;
-            if (c == '\n') {
-                line[ptr] = '\0';
-                log_msg("->%s<-\n", line);
-                process_msg(line, ptr);
-                ptr = 0;
-                continue;
-            }
-            line[ptr++] = c;
-            if (ptr > sizeof(line)) ptr = 0;
-        }
+        in_msg[in_msg_ptr++] = c;
+        if (in_msg_ptr > sizeof(in_msg)) in_msg_ptr = 0;
     }
+
+   done:
+    return loop_delay;
 }
-#endif
 
 //* ------------------------------------------------------ API -------------------------------------------- */
 PLUGIN_API int
@@ -156,13 +125,6 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
 
     psep = XPLMGetDirectorySeparator();
     XPLMGetSystemPath(xpdir);
-
-    /* load preferences */
-    XPLMGetPrefsPath(pref_path);
-    XPLMExtractFileAndPath(pref_path);
-    strcat(pref_path, psep);
-    strcat(pref_path, "rmpif.prf");
-    load_pref();
     return 1;
 }
 
@@ -170,7 +132,6 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
 PLUGIN_API void
 XPluginStop(void)
 {
-    save_pref();
 }
 
 
@@ -183,6 +144,31 @@ XPluginDisable(void)
 PLUGIN_API int
 XPluginEnable(void)
 {
+    char cfg_path[512];
+    snprintf(cfg_path, sizeof cfg_path, "%sResources%splugins%srmpif%srmpif.cfg",
+             xpdir, psep, psep, psep);
+    FILE *f = fopen(cfg_path, "r");
+    if (NULL == f) {
+        log_msg("no rmpif.cfg in plugin dir");
+        return 0;
+    }
+    
+    fgets(port, sizeof(port), f);
+    fclose(f);
+    
+    int n = strlen(port);
+    if (port[n-1] == '\n') port[n-1] = '\0';
+    log_msg("rmpif port is ->%s<-", port);
+ 
+    if (port_open(port) >= 0) {
+        log_msg("port opened");
+    } else {
+        port_log_error("open fail");
+        error_disabled = 1; /* better be paranoid */
+        return 0;
+    }
+    
+    XPLMRegisterFlightLoopCallback(flight_loop_cb, 1.0f, NULL);
     return 1;
 }
 
@@ -190,27 +176,4 @@ XPluginEnable(void)
 PLUGIN_API void
 XPluginReceiveMessage(XPLMPluginID in_from, long in_msg, void *in_param)
 {
-    UNUSED(in_from);
-    switch (in_msg) {
-        case XPLM_MSG_PLANE_LOADED:
-#if 0
-            XPLMMenuID menu = XPLMFindPluginsMenu();
-            int sub_menu = XPLMAppendMenuItem(menu, "Simbrief Connector", NULL, 1);
-            tlsb_menu = XPLMCreateMenu("Simbrief Connector", menu, sub_menu, menu_cb, NULL);
-            XPLMAppendMenuItem(tlsb_menu, "Configure", &conf_widget, 0);
-            XPLMAppendMenuItem(tlsb_menu, "Fetch OFP", &getofp_widget, 0);
-
-            toggle_cmdr = XPLMCreateCommand("tlsb/toggle", "Toggle simbrief connector widget");
-            XPLMRegisterCommandHandler(toggle_cmdr, toggle_cmd_cb, 0, NULL);
-
-            fetch_cmdr = XPLMCreateCommand("tlsb/fetch", "Fetch ofp data and show in widget");
-            XPLMRegisterCommandHandler(fetch_cmdr, fetch_cmd_cb, 0, NULL);
-
-            fetch_xfer_cmdr = XPLMCreateCommand("tlsb/fetch_xfer", "Fetch ofp data and xfer load data");
-            XPLMRegisterCommandHandler(fetch_xfer_cmdr, fetch_xfer_cmd_cb, 0, NULL);
-
-            flight_loop_id = XPLMCreateFlightLoop(&create_flight_loop);
-#endif
-            break;
-    }
 }

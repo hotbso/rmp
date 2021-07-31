@@ -11,13 +11,13 @@ CC=x86_64-w64-mingw32-gcc
 LD=x86_64-w64-mingw32-gcc
 
 CFLAGS+=-g0 -O2 -s -Wall -fdiagnostics-color -Wno-format-overflow -DWINDOWS -DWIN32 \
-	-I$(SDK)/CHeaders/XPLM -I$(SDK)/CHeaders/Widgets -DIBM=1 \
+	-I$(SDK)/CHeaders/XPLM -DIBM=1 \
     -DXPLM200 -DXPLM210 -DXPLM300 -DXPLM301 $(DEFINES)
 
 CFLAGS_DLL=$(CFLAGS) -mdll
 
 LDFLAGS=-shared -static-libgcc -static -lpthread
-LIBS=-L$(SDK)/Libraries/Win -lXPLM_64 -lXPWidgets_64
+LIBS=-L$(SDK)/Libraries/Win -lXPLM_64
 
 
 all: $(TARGET)
