@@ -25,5 +25,6 @@ SOFTWARE.
 extern void log_msg(const char *fmt, ...);
 extern int port_open(const char *port);
 extern int port_read(char *buffer, size_t len);
+extern int port_write(char *buffer, size_t len);
 extern void port_log_error(const char *str);
 

@@ -45,18 +45,18 @@ SOFTWARE.
 
 #define VERSION "0.9a"
 
-static char port[20] = "COM8";
+#define HEARTBEAT 5
 
 static float flight_loop_cb(float unused1, float unused2, int unused3, void *unused4);
-
-static char xpdir[512];
-static const char *psep;
 
 static int dr_mapped;
 static int error_disabled;
 
 static char in_msg[100];
 static int in_msg_ptr;
+static XPLMDataRef com1_dr, com1_standby_dr;
+static char port[20];
+static time_t heartbeat_ts;
 
 static void process_msg(int len) {
     if (in_msg[0] == 'D') {
@@ -65,9 +65,45 @@ static void process_msg(int len) {
         long f;
         if (1 == sscanf(in_msg, "S%6ld_", &f)) {
             log_msg("%ld", f);
+            XPLMSetDatai(com1_standby_dr, f);
         } else {
             log_msg("invalid input ->%s<-", in_msg);
         }
+    } else if (in_msg[0] == 'X' && in_msg[len-1] == '_') {
+        long f, fs;
+        if (2 == sscanf(in_msg, "X%6ld%6ld_", &f, &fs)) {
+            log_msg("%ld %ld", f, fs);
+            XPLMSetDatai(com1_dr, f);
+            XPLMSetDatai(com1_standby_dr, fs);
+        } else {
+            log_msg("invalid input ->%s<-", in_msg);
+        }
+    }
+
+}
+
+static void
+send_heartbeat()
+{
+    int c1 = XPLMGetDatai(com1_dr);
+    int c1s = XPLMGetDatai(com1_standby_dr);
+
+    char buffer[50];
+    snprintf(buffer, sizeof(buffer), "H%06d%06da\n", c1, c1s);
+    //log_msg("send ->%s<-", buffer);
+
+    int len = strlen(buffer);
+    int n;
+    if ((n = port_write(buffer, len)) < 0) {
+        port_log_error("write");
+        error_disabled = 1;
+        return;
+    }
+
+    if (n != len) {
+        log_msg("short write");
+        error_disabled = 1;
+        return;
     }
 }
 
@@ -78,6 +114,15 @@ flight_loop_cb(float elapsed_last_call,
     float loop_delay = 0.2f;
     if (error_disabled)
         return 60.0;
+
+    time_t now = time(NULL);
+    if (now > heartbeat_ts) {
+        send_heartbeat();
+        if (error_disabled)
+            return 60.0;
+
+        heartbeat_ts = now + 5;
+    }
 
     char buffer[100];
     int n;
@@ -109,6 +154,23 @@ flight_loop_cb(float elapsed_last_call,
     return loop_delay;
 }
 
+static void
+map_datarefs()
+{
+    if (dr_mapped)
+        return;
+
+    dr_mapped = 1;
+
+    if (NULL == (com1_standby_dr = XPLMFindDataRef("sim/cockpit2/radios/actuators/com1_standby_frequency_hz_833"))) goto err;
+    if (NULL == (com1_dr = XPLMFindDataRef("sim/cockpit2/radios/actuators/com1_frequency_hz_833"))) goto err;
+    return;
+
+err:
+    error_disabled = 1;
+    log_msg("Can't map all datarefs, disabled");
+}
+
 //* ------------------------------------------------------ API -------------------------------------------- */
 PLUGIN_API int
 XPluginStart(char *out_name, char *out_sig, char *out_desc)
@@ -117,14 +179,12 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
 
     /* Always use Unix-native paths on the Mac! */
     XPLMEnableFeature("XPLM_USE_NATIVE_PATHS", 1);
-    XPLMEnableFeature("XPLM_USE_NATIVE_WIDGET_WINDOWS", 1);
 
     strcpy(out_name, "rmpif " VERSION);
     strcpy(out_sig, "rmpif-hotbso");
     strcpy(out_desc, "A plugin that connects to an Arduino based rmp");
 
-    psep = XPLMGetDirectorySeparator();
-    XPLMGetSystemPath(xpdir);
+    XPLMRegisterFlightLoopCallback(flight_loop_cb, 1.0f, NULL);
     return 1;
 }
 
@@ -144,7 +204,17 @@ XPluginDisable(void)
 PLUGIN_API int
 XPluginEnable(void)
 {
+    char xpdir[512];
+    const char *psep;
     char cfg_path[512];
+
+    map_datarefs();
+    if (! dr_mapped)
+        return 0;
+
+    psep = XPLMGetDirectorySeparator();
+    XPLMGetSystemPath(xpdir);
+
     snprintf(cfg_path, sizeof cfg_path, "%sResources%splugins%srmpif%srmpif.cfg",
              xpdir, psep, psep, psep);
     FILE *f = fopen(cfg_path, "r");
@@ -152,14 +222,14 @@ XPluginEnable(void)
         log_msg("no rmpif.cfg in plugin dir");
         return 0;
     }
-    
+
     fgets(port, sizeof(port), f);
     fclose(f);
-    
+
     int n = strlen(port);
     if (port[n-1] == '\n') port[n-1] = '\0';
     log_msg("rmpif port is ->%s<-", port);
- 
+
     if (port_open(port) >= 0) {
         log_msg("port opened");
     } else {
@@ -167,8 +237,8 @@ XPluginEnable(void)
         error_disabled = 1; /* better be paranoid */
         return 0;
     }
-    
-    XPLMRegisterFlightLoopCallback(flight_loop_cb, 1.0f, NULL);
+
+    /* starts the flight loop */
     return 1;
 }
 

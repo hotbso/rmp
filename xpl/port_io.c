@@ -88,6 +88,16 @@ int port_read(char *buffer, size_t len)
     return dwBytesRead;
 }
 
+int port_write(char *buffer, size_t len)
+{
+    DWORD dwBytesWritten;
+    if(!WriteFile(hComm, buffer, len, &dwBytesWritten, NULL))
+        return -1;
+
+    return dwBytesWritten;
+}
+
+
 void port_log_error(const char *str)
 {
     log_msg("port error (%s): %d\n", str, GetLastError());
