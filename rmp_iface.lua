@@ -35,7 +35,7 @@ ipc.log("ACF model: '" .. acf_model .. "'")
 
 local trim_inc = 0  -- default use trim up/down control
 if acf_model == "AC11" then
-    trim_inc = 256
+    trim_inc = 350
 end
 
 local script_directory = debug.getinfo(1, "S").source:sub(2)
