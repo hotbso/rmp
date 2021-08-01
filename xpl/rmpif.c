@@ -38,16 +38,11 @@ SOFTWARE.
 
 #include "rmpif.h"
 
-// sim/cockpit2/radios/actuators/com1_standby_frequency_hz_833
-// sim/cockpit2/radios/actuators/com1_frequency_hz_833
-
 #define UNUSED(x) (void)(x)
 
 #define VERSION "0.9a"
 
 #define HEARTBEAT 5
-
-static float flight_loop_cb(float unused1, float unused2, int unused3, void *unused4);
 
 static int dr_mapped;
 static int error_disabled;
@@ -55,8 +50,10 @@ static int error_disabled;
 static char in_msg[100];
 static int in_msg_ptr;
 static XPLMDataRef com1_dr, com1_standby_dr;
+static XPLMCommandRef trim_up_cmdr, trim_down_cmdr;
 static char port[20];
 static time_t heartbeat_ts;
+static int last_com1_f, last_com1_sf;
 
 static void process_msg(int len) {
     if (in_msg[0] == 'D') {
@@ -78,18 +75,21 @@ static void process_msg(int len) {
         } else {
             log_msg("invalid input ->%s<-", in_msg);
         }
+    } else if (0 == strcmp(in_msg, "TD_")) {
+        /* discard */
+    } else if (0 == strcmp(in_msg, "TU_")) {
+        /* discard */
+    } else {
+        log_msg("invalid msg ->%s<- discarded", in_msg);
     }
-
 }
 
 static void
-send_heartbeat()
+send_heartbeat(int com1_f, int com1_sf)
 {
-    int c1 = XPLMGetDatai(com1_dr);
-    int c1s = XPLMGetDatai(com1_standby_dr);
-
     char buffer[50];
-    snprintf(buffer, sizeof(buffer), "H%06d%06da\n", c1, c1s);
+    snprintf(buffer, sizeof(buffer), "H%06d%06da\n", com1_f, com1_sf);
+    last_com1_f = com1_f; last_com1_sf = com1_sf;
     //log_msg("send ->%s<-", buffer);
 
     int len = strlen(buffer);
@@ -115,9 +115,13 @@ flight_loop_cb(float elapsed_last_call,
     if (error_disabled)
         return 60.0;
 
+    int com1_f = XPLMGetDatai(com1_dr);
+    int com1_sf = XPLMGetDatai(com1_standby_dr);
+
     time_t now = time(NULL);
-    if (now > heartbeat_ts) {
-        send_heartbeat();
+    if ((now > heartbeat_ts)
+        || (com1_f != last_com1_f) || (com1_sf != last_com1_sf)) {
+        send_heartbeat(com1_f, com1_sf);
         if (error_disabled)
             return 60.0;
 
@@ -164,6 +168,8 @@ map_datarefs()
 
     if (NULL == (com1_standby_dr = XPLMFindDataRef("sim/cockpit2/radios/actuators/com1_standby_frequency_hz_833"))) goto err;
     if (NULL == (com1_dr = XPLMFindDataRef("sim/cockpit2/radios/actuators/com1_frequency_hz_833"))) goto err;
+    if (NULL == (trim_down_cmdr = XPLMFindCommand("sim/flight_controls/pitch_trim_down"))) goto err;
+    if (NULL == (trim_up_cmdr = XPLMFindCommand("sim/flight_controls/pitch_trim_up"))) goto err;
     return;
 
 err:
