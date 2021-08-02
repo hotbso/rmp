@@ -28,8 +28,6 @@ SOFTWARE.
 #include <stdio.h>
 #include <time.h>
 #include <stdarg.h>
-#include <unistd.h>
-#include <errno.h>
 
 #include "XPLMPlugin.h"
 #include "XPLMDataAccess.h"
@@ -44,7 +42,6 @@ SOFTWARE.
 
 #define HEARTBEAT 5
 
-static int dr_mapped;
 static int error_disabled;
 
 static char in_msg[100];
@@ -158,24 +155,6 @@ flight_loop_cb(float elapsed_last_call,
     return loop_delay;
 }
 
-static void
-map_datarefs()
-{
-    if (dr_mapped)
-        return;
-
-    dr_mapped = 1;
-
-    if (NULL == (com1_standby_dr = XPLMFindDataRef("sim/cockpit2/radios/actuators/com1_standby_frequency_hz_833"))) goto err;
-    if (NULL == (com1_dr = XPLMFindDataRef("sim/cockpit2/radios/actuators/com1_frequency_hz_833"))) goto err;
-    if (NULL == (trim_down_cmdr = XPLMFindCommand("sim/flight_controls/pitch_trim_down"))) goto err;
-    if (NULL == (trim_up_cmdr = XPLMFindCommand("sim/flight_controls/pitch_trim_up"))) goto err;
-    return;
-
-err:
-    error_disabled = 1;
-    log_msg("Can't map all datarefs, disabled");
-}
 
 //* ------------------------------------------------------ API -------------------------------------------- */
 PLUGIN_API int
@@ -189,6 +168,14 @@ XPluginStart(char *out_name, char *out_sig, char *out_desc)
     strcpy(out_name, "rmpif " VERSION);
     strcpy(out_sig, "rmpif-hotbso");
     strcpy(out_desc, "A plugin that connects to an Arduino based rmp");
+
+    if ((NULL == (com1_standby_dr = XPLMFindDataRef("sim/cockpit2/radios/actuators/com1_standby_frequency_hz_833")))
+        || (NULL == (com1_dr = XPLMFindDataRef("sim/cockpit2/radios/actuators/com1_frequency_hz_833")))
+        || (NULL == (trim_down_cmdr = XPLMFindCommand("sim/flight_controls/pitch_trim_down")))
+        || (NULL == (trim_up_cmdr = XPLMFindCommand("sim/flight_controls/pitch_trim_up")))) {
+        log_msg("Can't map all datarefs, disabled");
+        return 0;
+    }
 
     XPLMRegisterFlightLoopCallback(flight_loop_cb, 1.0f, NULL);
     return 1;
@@ -213,10 +200,6 @@ XPluginEnable(void)
     char xpdir[512];
     const char *psep;
     char cfg_path[512];
-
-    map_datarefs();
-    if (! dr_mapped)
-        return 0;
 
     psep = XPLMGetDirectorySeparator();
     XPLMGetSystemPath(xpdir);
