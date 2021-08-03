@@ -64,11 +64,15 @@ static void process_msg(int len) {
             log_msg("invalid input ->%s<-", in_msg);
         }
     } else if (in_msg[0] == 'X' && in_msg[len-1] == '_') {
-        long f, fs;
-        if (2 == sscanf(in_msg, "X%6ld%6ld_", &f, &fs)) {
-            log_msg("%ld %ld", f, fs);
+        long f, sf;
+        if (2 == sscanf(in_msg, "X%6ld%6ld_", &f, &sf)) {
+            log_msg("%ld %ld", f, sf);
             XPLMSetDatai(com1_dr, f);
-            XPLMSetDatai(com1_standby_dr, fs);
+            XPLMSetDatai(com1_standby_dr, sf);
+
+            /* no need to report them back as changed */
+            last_com1_f = f;
+            last_com1_sf = sf;
         } else {
             log_msg("invalid input ->%s<-", in_msg);
         }
