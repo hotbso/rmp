@@ -58,7 +58,6 @@ static void process_msg(int len) {
     } else if (in_msg[0] == 'S' && in_msg[len-1] == '_') {
         long f;
         if (1 == sscanf(in_msg, "S%6ld_", &f)) {
-            log_msg("%ld", f);
             XPLMSetDatai(com1_standby_dr, f);
         } else {
             log_msg("invalid input ->%s<-", in_msg);
@@ -66,7 +65,6 @@ static void process_msg(int len) {
     } else if (in_msg[0] == 'X' && in_msg[len-1] == '_') {
         long f, sf;
         if (2 == sscanf(in_msg, "X%6ld%6ld_", &f, &sf)) {
-            log_msg("%ld %ld", f, sf);
             XPLMSetDatai(com1_dr, f);
             XPLMSetDatai(com1_standby_dr, sf);
 
@@ -146,7 +144,7 @@ flight_loop_cb(float elapsed_last_call,
         if (c == '\r') continue;
         if (c == '\n') {
             in_msg[in_msg_ptr] = '\0';
-            log_msg("->%s<-\n", in_msg);
+            // log_msg("->%s<-\n", in_msg);
             process_msg(in_msg_ptr);
             in_msg_ptr = 0;
             continue;
