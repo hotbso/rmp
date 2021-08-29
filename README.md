@@ -1,5 +1,5 @@
 # rmp for flight simulation
-Arduino based rmp that interfaces to prepar3d
+Arduino based rmp that interfaces to prepar3d and X Plane 11
 
 As a bonus you have an encoder on the side for elevator trim
 
