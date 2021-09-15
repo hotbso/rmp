@@ -193,6 +193,7 @@ XPluginStop(void)
 PLUGIN_API void
 XPluginDisable(void)
 {
+    port_close();
 }
 
 
@@ -223,6 +224,7 @@ XPluginEnable(void)
 
     if (port_open(port) >= 0) {
         log_msg("port opened");
+        error_disabled = 0;
     } else {
         port_log_error("open fail");
         error_disabled = 1; /* better be paranoid */

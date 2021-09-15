@@ -26,7 +26,7 @@ SOFTWARE.
 #include <stdio.h>
 #include "rmpif.h"
 
-static HANDLE hComm;
+static HANDLE hComm = INVALID_HANDLE_VALUE;
 
 int port_open(const char *port)
 {
@@ -75,8 +75,16 @@ int port_open(const char *port)
         log_msg("Invalid value: %d\r\n", GetLastError());
         return -1;
     }
-    
+
     return 0;
+}
+
+void port_close(void)
+{
+   if (hComm != INVALID_HANDLE_VALUE) {
+       CloseHandle(hComm);
+       hComm = INVALID_HANDLE_VALUE;
+   }
 }
 
 int port_read(char *buffer, size_t len)
