@@ -47,10 +47,22 @@ static int error_disabled;
 static char in_msg[100];
 static int in_msg_ptr;
 static XPLMDataRef com1_dr, com1_standby_dr;
-static XPLMCommandRef trim_up_cmdr, trim_down_cmdr;
+static XPLMCommandRef trim_up_cmdr, trim_down_cmdr, trim_active_cmdr;
+static int trim_ticks;
 static char port[20];
 static time_t heartbeat_ts;
 static int last_com1_f, last_com1_sf;
+
+static void trim_cmd(XPLMCommandRef cmdr)
+{
+    if (trim_active_cmdr != NULL && trim_active_cmdr != cmdr) { /* change of direction */
+        XPLMCommandEnd(trim_active_cmdr);
+    }
+
+    trim_active_cmdr = cmdr;
+    XPLMCommandBegin(cmdr);
+    trim_ticks = 3;
+}
 
 static void process_msg(int len) {
     if (in_msg[0] == 'D') {
@@ -75,9 +87,9 @@ static void process_msg(int len) {
             log_msg("invalid input ->%s<-", in_msg);
         }
     } else if (0 == strcmp(in_msg, "TD_")) {
-        /* discard */
+        trim_cmd(trim_down_cmdr);
     } else if (0 == strcmp(in_msg, "TU_")) {
-        /* discard */
+        trim_cmd(trim_up_cmdr);
     } else {
         log_msg("invalid msg ->%s<- discarded", in_msg);
     }
@@ -110,7 +122,15 @@ static float
 flight_loop_cb(float elapsed_last_call,
                float elapsed_last_loop, int counter, void *in_refcon)
 {
-    float loop_delay = 0.2f;
+    float loop_delay = 0.1f;
+
+    if (trim_ticks > 0) {   /* be careful to avoid integer wrap during long periods of trim inactivity */
+        if (--trim_ticks == 0) {
+            XPLMCommandEnd(trim_active_cmdr);
+            trim_active_cmdr = NULL;
+        }
+    }
+
     if (error_disabled)
         return 60.0;
 
@@ -231,6 +251,7 @@ XPluginEnable(void)
         return 0;
     }
 
+    trim_active_cmdr = NULL;
     /* starts the flight loop */
     return 1;
 }
