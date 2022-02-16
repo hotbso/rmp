@@ -34,7 +34,7 @@ _, _, acf_model = string.find(ipc.readSTR(0x3500, 24), "([%a%d]+)")
 ipc.log("ACF model: '" .. acf_model .. "'")
 
 local trim_inc = 0  -- default use trim up/down control
-if acf_model == "AC11" then
+if acf_model == "AC11" or acf_model == "C172" then
     trim_inc = 350
 elseif acf_model == "Optica" then
     trim_inc = 200
@@ -58,7 +58,7 @@ function rmp_data(h, data, len)
     if data:sub(len, len) == "\n" then
         data = data:sub(1, len - 1)
     end
-    ipc.log(data)
+    -- ipc.log(data)
     if data:sub(1, 1) == "X" then
         local a = tonumber(data:sub(2, 7))
         local s = tonumber(data:sub(8, 13))
@@ -108,9 +108,9 @@ end
 function rmp_heartbeat()
     local active = ipc.readSD(ofs_active) / 1000
     local stdby = ipc.readSD(ofs_stdby) / 1000
-    ipc.log("a: " .. active .. " s: " .. stdby)
+    -- ipc.log("a: " .. active .. " s: " .. stdby)
     msg = string.format("H%06d%06da\n", active, stdby)
-    ipc.log(msg)
+    -- ipc.log(msg)
     if rmp ~= 0 then
         com.write(rmp, msg)
     end

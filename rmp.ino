@@ -25,6 +25,8 @@
 
 */
 
+/* Board "Arduino Nano", Proc "ATMega328P (Old Bootloader)" */
+
 #include <Arduino.h>
 #include <limits.h>
 #include <LiquidCrystal_I2C.h>
