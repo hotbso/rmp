@@ -206,8 +206,8 @@ dial_step(int mode, RotaryEncoder::Direction dir, int steps = 1) {
         // the mHz don't wrap
         if (stdby_mHz < 118)
             stdby_mHz = 118;
-        else if (stdby_mHz > 135)
-            stdby_mHz = 135;
+        else if (stdby_mHz > 136)
+            stdby_mHz = 136;
     } else {
         do  {
             int kHz8 = stdby_kHz % 25;
