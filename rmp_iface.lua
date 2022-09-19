@@ -55,28 +55,25 @@ local ofs_stdby = 0x05CC
 local ofs_trim = 0x0BC0
 
 function rmp_data(h, data, len)
-    if data:sub(len, len) == "\n" then
-        data = data:sub(1, len - 1)
-    end
     -- ipc.log(data)
-    if data:sub(1, 1) == "X" then
+    if data:sub(1, 1) == "X" and data:sub(14, 14) == "_" then
         local a = tonumber(data:sub(2, 7))
         local s = tonumber(data:sub(8, 13))
-  
+
         ipc.log("a = " .. a .. "  s = " .. s)
         ipc.writeSD(ofs_active, a * 1000)
         ipc.writeSD(ofs_stdby, s * 1000)
         return
     end
-    
-    if data:sub(1, 1) == "S" then
+
+    if data:sub(1, 1) == "S" and data:sub(8, 8) == "_" then
         local s = tonumber(data:sub(2, 7))
         -- ipc.log("s = " .. s)
         ipc.writeSD(ofs_stdby, s * 1000)
         return
     end
 
-    if data:sub(1, 2) == "TD" then
+    if data:sub(1, 3) == "TD_" then
         -- ipc.log("TD")
         if trim_inc == 0 then
             ipc.control(65607) -- trim down
@@ -90,7 +87,7 @@ function rmp_data(h, data, len)
         return
     end
 
-    if data:sub(1, 2) == "TU" then
+    if data:sub(1, 3) == "TU_" then
         -- ipc.log("TU")
         if trim_inc == 0 then
             ipc.control(65615) -- trim up
@@ -103,6 +100,13 @@ function rmp_data(h, data, len)
         end
         return
     end
+
+    if data:sub(1, 1) == "D" then
+        ipc.log(data)
+        return
+    end
+
+    ipc.log("invalid msg '" .. data .. "'")
 end
 
 function rmp_heartbeat()
