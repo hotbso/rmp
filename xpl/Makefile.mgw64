@@ -4,7 +4,7 @@ TARGET=win.xpl
 
 HEADERS=$(wildcard *.h)
 OBJECTS=rmpif.o log_msg.o port_io.o
-SDK=E:/XPL-Tools/SDK
+SDK=E:/XPL-Tools/git/SDK
 PLUGDIR=/e/X-Plane-11/Resources/plugins/rmpif
 
 CC=x86_64-w64-mingw32-gcc
